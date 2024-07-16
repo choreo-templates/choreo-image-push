@@ -3365,6 +3365,12 @@ const path = __nccwpck_require__(17);
 
 const choreoApp = process.env.CHOREO_GITOPS_REPO;
 const type = core.getInput('type');
+const organizationUuid = core.getInput('organizationUuid');
+
+const ACR = "ACR";
+const ECR = "ECR";
+const DOCKER_HUB = "DOCKER_HUB";
+const GCP = "GCP";
 
 async function run() {
   switch (type) {
@@ -3387,20 +3393,20 @@ async function login_and_push() {
     );
     let data = JSON.parse(fileContents);
     for (const cred of data) {
-      if (cred.type == "ACR") {
+      if (cred.type == ACR) {
         await acrLogin(cred);
-        await dockerPush(cred);
+        await dockerPush(cred , ACR);
       }
-      if (cred.type == "ECR") {
+      if (cred.type == ECR) {
         await ecrLoginPrivate(cred);
-        await dockerPush(cred);
+        await dockerPush(cred, ECR);
       }
-      if (cred.type == "GCP") {
+      if (cred.type == GCP) {
         await setupGcpArtifactRegistry(cred);
       }
-      if (cred.type == "DOCKER_HUB") {
+      if (cred.type == DOCKER_HUB) {
         await dockerHubLogin(cred);
-        await dockerPush(cred);
+        await dockerPush(cred, DOCKER_HUB);
       }
     }
   } catch (error) {
@@ -3419,16 +3425,16 @@ async function login() {
       if ((cred?.is_cdp === undefined || cred?.is_cdp) && cred.registry_id != "choreo-docker-hub")  {
         continue;
       }
-      if (cred.type == "ACR") {
+      if (cred.type == ACR) {
         await acrLogin(cred);
       }
-      if (cred.type == "ECR") {
+      if (cred.type == ECR) {
         await ecrLoginPrivate(cred);
       }
-      if (cred.type == "GCP") {
+      if (cred.type == GCP) {
         await gcpArtifactRegistryLogin(cred);
       }
-      if (cred.type == "DOCKER_HUB") {
+      if (cred.type == DOCKER_HUB) {
         await dockerHubLogin(cred);
       }
     }
@@ -3631,7 +3637,15 @@ async function acrLogin(cred) {
   }
 }
 
-async function dockerPush(cred) {
+function constructRegistryUrl(cred, registryType) {
+  const registryUrl = cred.credentials.registry;
+  if (registryType == ECR) {
+    return`${registryUrl}/${organizationUuid}:${choreoApp}-${process.env.NEW_SHA}`;
+  }
+  return `${registryUrl}/${choreoApp}:${process.env.NEW_SHA}`;
+}
+
+async function dockerPush(cred, registryType) {
   // We do a docker login to increase the image pull rate limit and this registry id is added as a choreo-docker-hub
   // so we skip the docker push for this registry
   if (cred.registry_id == "choreo-docker-hub") {
@@ -3639,7 +3653,7 @@ async function dockerPush(cred) {
   }
   const tempImage = process.env.DOCKER_TEMP_IMAGE;
   const registryUrl = cred.credentials.registry;
-  const newImageTag = `${registryUrl}/${choreoApp}:${process.env.NEW_SHA}`;
+  const newImageTag = constructRegistryUrl(cred, registryType);
   // Pushing images to Registory
   var child = spawn(
     `docker image tag ${tempImage} ${newImageTag} && docker push ${newImageTag} && docker logout ${registryUrl}`,

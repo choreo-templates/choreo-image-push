@@ -16,4 +16,5 @@ build:
       uses: choreo-templates/choreo-image-push@v1.0.6
       with:
        type: login_and_push
+       organizationUuid: ${{ env.ORG_UUID }}
 ```
